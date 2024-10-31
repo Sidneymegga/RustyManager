@@ -11,7 +11,7 @@ show_progress() {
 
 error_exit() {
     echo -e "\nErro: $1"
-    return
+    exit 1
 }
 
 increment_step() {
@@ -28,14 +28,14 @@ else
     SCRIPT_VERSION="main"
     increment_step
 
-    # ---->>>> Verificação do sistema
+    # Verificação do sistema
     show_progress "Verificando o sistema..."
     if ! command -v lsb_release &> /dev/null; then
         apt-get install lsb-release -y > /dev/null 2>&1 || error_exit "Falha ao instalar lsb-release"
     fi
     increment_step
 
-    # ---->>>> Verificação do sistema
+    # Verificação do sistema
     OS_NAME=$(lsb_release -is)
     VERSION=$(lsb_release -rs)
 
@@ -66,19 +66,18 @@ else
     esac
     increment_step
 
-    # ---->>>> Instalação de pacotes requisitos e atualização do sistema
+    # Instalação de pacotes requisitos e atualização do sistema
     show_progress "Atualizando o sistema..."
     apt-get upgrade -y > /dev/null 2>&1 || error_exit "Falha ao atualizar o sistema"
     apt-get install gnupg curl build-essential git cmake sysstat net-tools sqlite3 libsqlite3-dev -y > /dev/null 2>&1 || error_exit "Falha ao instalar pacotes"
     increment_step
 
-    # ---->>>> Criando o diretorio do script
-    show_progress "Criando diretorio /opt/rustymanager..."
-    mkdir /opt/ > /dev/null 2>&1
-    mkdir /opt/rustymanager > /dev/null 2>&1
+    # Criando o diretório do script
+    show_progress "Criando diretório /opt/rustymanager..."
+    mkdir -p /opt/rustymanager
     increment_step
 
-    # ---->>>> Criando as colunas no banco de dados
+    # Configurando o banco de dados
     show_progress "Configurando o banco de dados..."
     sqlite3 /opt/rustymanager/db "
     CREATE TABLE IF NOT EXISTS users (
@@ -99,7 +98,7 @@ else
     " || error_exit "Falha ao configurar o banco de dados"
     increment_step
 
-    # ---->>>> Instalar rust
+    # Instalação do Rust
     show_progress "Instalando Rust..."
     if ! command -v rustc &> /dev/null; then
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y > /dev/null 2>&1 || error_exit "Falha ao instalar Rust"
@@ -107,11 +106,9 @@ else
     fi
     increment_step
 
-    # ---->>>> Instalar o RustyManager
-    show_progress "Compilando RustyManager, isso pode levar bastante tempo dependendo da maquina..."
-    mkdir -p /opt/rustymanager
+    # Instalação do RustyManager
+    show_progress "Compilando RustyManager, isso pode levar bastante tempo dependendo da máquina..."
     git clone --branch "$SCRIPT_VERSION" --recurse-submodules --single-branch https://github.com/Sidneymegga/RustyManager.git /root/RustyManager > /dev/null 2>&1 || error_exit "Falha ao clonar RustyManager"
-
     cd /root/RustyManager/
     cargo build --release --jobs $(nproc) > /dev/null 2>&1 || error_exit "Falha ao compilar RustyManager"
     mv ./target/release/SshScript /opt/rustymanager/manager
@@ -120,8 +117,9 @@ else
     mv ./target/release/ConnectionsManager /opt/rustymanager/connectionsmanager
     increment_step
 
-    # ---->>>> Compilar BadVPN
-    show_progress "Compilando BadVPN..."
+    # Instalação do BadVPN
+    show_progress "Baixando e compilando BadVPN..."
+    git clone https://github.com/ambrop72/badvpn.git /root/RustyManager/BadVpn/badvpn > /dev/null 2>&1 || error_exit "Falha ao clonar BadVPN"
     mkdir -p /root/RustyManager/BadVpn/badvpn/badvpn-build
     cd /root/RustyManager/BadVpn/badvpn/badvpn-build
     cmake .. -DBUILD_NOTHING_BY_DEFAULT=1 -DBUILD_UDPGW=1 > /dev/null 2>&1 || error_exit "Falha ao configurar cmake para BadVPN"
@@ -129,13 +127,13 @@ else
     mv udpgw/badvpn-udpgw /opt/rustymanager/badvpn
     increment_step
 
-    # ---->>>> Configuração de permissões
+    # Configuração de permissões
     show_progress "Configurando permissões..."
-    chmod +x /opt/rustymanager/{manager,proxy,connectionsmanager,checkuser,badvpn}
+    chmod +x /opt/rustymanager/{manager,rustyproxy,connectionsmanager,checkuser,badvpn}
     ln -sf /opt/rustymanager/manager /usr/local/bin/menu
     increment_step
 
-    # ---->>>> Instalando STunnel
+    # Instalação do STunnel
     show_progress "Instalando STunnel..."
     apt-get install -y stunnel4 > /dev/null 2>&1 || error_exit "Falha ao instalar STunnel"
     wget -O /etc/stunnel/cert.pem https://raw.githubusercontent.com/Sidneymegga/RustyManager/refs/heads/main/Utils/stunnel/cert.pem > /dev/null 2>&1 || error_exit "Falha ao baixar cert.pem"
@@ -146,24 +144,23 @@ else
     systemctl disable stunnel4 > /dev/null 2>&1
     increment_step
 
-
-    # ---->>>> Instalar speedtest
+    # Instalação do Speedtest
     show_progress "Instalando Speedtest..."
     curl -s https://packagecloud.io/install/repositories/ookla/speedtest-cli/script.deb.sh | bash > /dev/null 2>&1 || error_exit "Falha ao baixar e instalar o script do speedtest"
     apt-get install -y speedtest > /dev/null 2>&1 || error_exit "Falha ao instalar o speedtest"
     increment_step
     
-    # ---->>>> Instalar Htop
+    # Instalação do Htop
     show_progress "Instalando monitor de recursos..."
-    apt-get install -y htop > /dev/null 2>&1 || error_exit "Falha ao instalar o speedtest"
+    apt-get install -y htop > /dev/null 2>&1 || error_exit "Falha ao instalar o htop"
     increment_step
 
-    # ---->>>> Limpeza
+    # Limpeza
     show_progress "Limpando diretórios temporários..."
     cd /root/
     rm -rf /root/RustyManager/
     increment_step
 
-    # ---->>>> Instalação finalizada :)
-    echo "Instalação concluída com sucesso. digite 'menu' para acessar o menu."
+    # Instalação finalizada
+    echo "Instalação concluída com sucesso. Digite 'menu' para acessar o menu."
 fi
